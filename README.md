@@ -1,7 +1,10 @@
 
-#Here will be some code for an esp32 with a display to show the departures for sl. This is the stockholm comunity traffic
+# Here will be some code for an esp32 with a display to show the departures for sl. This is the stockholm comunity traffic
 
 wget http://api.sl.se/api2/realtimedeparturesv4.json?key=<KEY>&siteid=9192&timewindow=5
+
+# Also check out this TFT library
+https://github.com/loboris/ESP32_TFT_library
 
 The example shows a working ESP32 and 2.2 Inch SPI TFT LCD Serial Port Module Display ILI9341
 
