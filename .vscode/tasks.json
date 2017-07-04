@@ -9,7 +9,7 @@
         "cwd": "${workspaceRoot}",
         "env": { 
             "IDF_PATH" : "~/esp/esp-idf", 
-            "PATH" : "${env.PATH}:/home/olas/esp/xtensa-esp32-elf/bin" 
+            "PATH" : "${env.PATH}:~/esp/xtensa-esp32-elf/bin" 
         }
     },
     "tasks": [

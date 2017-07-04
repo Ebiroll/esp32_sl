@@ -2,11 +2,17 @@
     "configurations": [
         {
             "name": "Linux",
-            "includePath": ["~/esp-idf/components/"],
-            "browse" : {
-                "limitSymbolsToIncludedHeaders" : true,
-                "databaseFilename" : ""
-            }
+            "includePath": [
+                "~/esp/esp-idf/components/"
+            ],
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": "",
+                "path": [
+                    "~/esp/esp-idf/components/"
+                ]
+            },
+            "intelliSenseMode": "clang-x64"
         }
     ]
 }
