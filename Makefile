@@ -3,7 +3,7 @@
 # project subdirectory.
 #
 
-PROJECT_NAME := testje
+PROJECT_NAME := sl
 
 include $(IDF_PATH)/make/project.mk
 
