@@ -6,7 +6,7 @@
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
    CONDITIONS OF ANY KIND, either express or implied.
 */
-
+#if 0
 #include <time.h>
 #include <errno.h>
 #include <sys/fcntl.h>
@@ -1251,8 +1251,8 @@ void app_main()
 
     // ===================================================
     // ==== Set display type                         =====
-    tft_disp_type = DEFAULT_DISP_TYPE;
-	//tft_disp_type = DISP_TYPE_ILI9341;
+    //tft_disp_type = DEFAULT_DISP_TYPE;
+	tft_disp_type = DISP_TYPE_ILI9341;
 	//tft_disp_type = DISP_TYPE_ILI9488;
 	//tft_disp_type = DISP_TYPE_ST7735B;
     // ===================================================
@@ -1462,3 +1462,4 @@ void app_main()
     //=========
 	tft_demo();
 }
+#endif

@@ -6,7 +6,7 @@
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
    CONDITIONS OF ANY KIND, either express or implied.
 */
-#if 0
+#if 1
 
 #include <time.h>
 #include <errno.h>
@@ -37,11 +37,31 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 
+#include "lwip/err.h"
+#include "lwip/sockets.h"
+#include "lwip/sys.h"
+#include "lwip/netdb.h"
+#include "lwip/dns.h"
+#include "json.h"
+
 
 // ==========================================================
 // Define which spi bus to use TFT_VSPI_HOST or TFT_HSPI_HOST
 #define SPI_BUS TFT_HSPI_HOST
 // ==========================================================
+
+
+/* Constants that aren't configurable in menuconfig */
+#define WEB_SERVER "api.sl.se"
+#define WEB_PORT 80
+#define WEB_URL "http://api.sl.se/api2/realtimedeparturesV4.json?key=<KEY>&siteid=9702&timewindow=30"
+
+static const char *TAG = "example";
+
+static const char *REQUEST = "GET " WEB_URL " HTTP/1.0\r\n"
+    "Host: "WEB_SERVER"\r\n"
+    "User-Agent: esp-idf/1.0 esp32\r\n"
+    "\r\n";
 
 
 static int _demo_pass = 0;
@@ -110,6 +130,102 @@ static void initialise_wifi(void)
     ESP_ERROR_CHECK( esp_wifi_start() );
 }
 
+
+static void http_get_task(void *pvParameters)
+{
+    const struct addrinfo hints = {
+        .ai_family = AF_INET,
+        .ai_socktype = SOCK_STREAM,
+    };
+    struct addrinfo *res;
+    struct in_addr *addr;
+    int s, r;
+    char recv_buf[64];
+
+    while(1) {
+        /* Wait for the callback to set the CONNECTED_BIT in the
+           event group.
+		*/
+		ESP_LOGI(TAG, "Waiting for connect to AP");		
+
+        xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT,
+                            false, true, portMAX_DELAY);
+        ESP_LOGI(TAG, "Connected to AP");
+
+        int err = getaddrinfo(WEB_SERVER, "80", &hints, &res);
+
+        if(err != 0 || res == NULL) {
+            ESP_LOGE(TAG, "DNS lookup failed err=%d res=%p", err, res);
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            continue;
+        }
+
+        /* Code to print the resolved IP.
+
+           Note: inet_ntoa is non-reentrant, look at ipaddr_ntoa_r for "real" code */
+        addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
+        ESP_LOGI(TAG, "DNS lookup succeeded. IP=%s", inet_ntoa(*addr));
+
+        s = socket(res->ai_family, res->ai_socktype, 0);
+        if(s < 0) {
+            ESP_LOGE(TAG, "... Failed to allocate socket.");
+            freeaddrinfo(res);
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            continue;
+        }
+        ESP_LOGI(TAG, "... allocated socket");
+
+        if(connect(s, res->ai_addr, res->ai_addrlen) != 0) {
+            ESP_LOGE(TAG, "... socket connect failed errno=%d", errno);
+            close(s);
+            freeaddrinfo(res);
+            vTaskDelay(4000 / portTICK_PERIOD_MS);
+            continue;
+        }
+
+        ESP_LOGI(TAG, "... connected");
+        freeaddrinfo(res);
+
+        if (write(s, REQUEST, strlen(REQUEST)) < 0) {
+            ESP_LOGE(TAG, "... socket send failed");
+            close(s);
+            vTaskDelay(4000 / portTICK_PERIOD_MS);
+            continue;
+        }
+        ESP_LOGI(TAG, "... socket send success");
+
+        struct timeval receiving_timeout;
+        receiving_timeout.tv_sec = 5;
+        receiving_timeout.tv_usec = 0;
+        if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &receiving_timeout,
+                sizeof(receiving_timeout)) < 0) {
+            ESP_LOGE(TAG, "... failed to set socket receiving timeout");
+            close(s);
+            vTaskDelay(4000 / portTICK_PERIOD_MS);
+            continue;
+        }
+        ESP_LOGI(TAG, "... set socket receiving timeout success");
+
+        /* Read HTTP response */
+        do {
+            bzero(recv_buf, sizeof(recv_buf));
+            r = read(s, recv_buf, sizeof(recv_buf)-1);
+            for(int i = 0; i < r; i++) {
+                putchar(recv_buf[i]);
+            }
+        } while(r > 0);
+
+        ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d\r\n", r, errno);
+        close(s);
+        for(int countdown = 10; countdown >= 0; countdown--) {
+            ESP_LOGI(TAG, "%d... ", countdown);
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+        }
+        ESP_LOGI(TAG, "Starting again!");
+    }
+}
+
+
 //-------------------------------
 static void initialize_sntp(void)
 {
@@ -151,7 +267,8 @@ static int obtain_time(void)
     	ESP_LOGI(tag, "System time is set.");
     }
 
-    ESP_ERROR_CHECK( esp_wifi_stop() );
+	// Dont stop wifi yet
+    //ESP_ERROR_CHECK( esp_wifi_stop() );
     return res;
 }
 
@@ -1321,7 +1438,7 @@ void app_main()
 
     vTaskDelay(500 / portTICK_RATE_MS);
 	printf("\r\n==============================\r\n");
-        printf("TFT display DEMO, LoBo 11/2017\r\n");
+    printf("TFT display DEMO, LoBo 11/2017\r\n");
 	printf("==============================\r\n");
     printf("Pins used: miso=%d, mosi=%d, sck=%d, cs=%d\r\n", PIN_NUM_MISO, PIN_NUM_MOSI, PIN_NUM_CLK, PIN_NUM_CS);
 #if USE_TOUCH > TOUCH_TYPE_NONE
@@ -1408,6 +1525,8 @@ void app_main()
 	// ==========================
 
 	disp_header("GET NTP TIME");
+	printf("------- obtain_time() -----\r\n");	
+	obtain_time();
 
     time(&time_now);
 	tm_info = localtime(&time_now);
@@ -1420,7 +1539,8 @@ void app_main()
     	TFT_print("Connecting to WiFi", CENTER, LASTY+TFT_getfontheight()+2);
     	TFT_print("Getting time over NTP", CENTER, LASTY+TFT_getfontheight()+2);
     	_fg = TFT_YELLOW;
-    	TFT_print("Wait", CENTER, LASTY+TFT_getfontheight()+2);
+		TFT_print("Wait", CENTER, LASTY+TFT_getfontheight()+2);
+		/*
         if (obtain_time()) {
         	_fg = TFT_GREEN;
         	TFT_print("System time is set.", CENTER, LASTY);
@@ -1428,7 +1548,8 @@ void app_main()
         else {
         	_fg = TFT_RED;
         	TFT_print("ERROR.", CENTER, LASTY);
-        }
+		}
+		*/
         time(&time_now);
     	update_header(NULL, "");
     	Wait(-2000);
@@ -1450,9 +1571,12 @@ void app_main()
     }
 	Wait(-2000);
 
+
+	xTaskCreate(&http_get_task, "http_get_task", 2*4096, NULL, 5, NULL);
+
 	//=========
-        // Run demo
-        //=========
+    // Run demo
+	//=========
 	tft_demo();
 }
 
