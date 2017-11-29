@@ -5,5 +5,7 @@
 
 PROJECT_NAME := sl
 
+EXTRA_CFLAGS += --save-temps
+
 include $(IDF_PATH)/make/project.mk
 
