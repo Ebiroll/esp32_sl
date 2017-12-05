@@ -59,9 +59,9 @@ void drawBusHeader() {
 	TFT_pushColorRep(0, 0, _width-1, _height-1, (color_t){0,0,0}, (uint32_t)(_height*_width));
 
 	TFT_setFont(COMIC24_FONT, NULL);
-	tempy =  4;  // TFT_getfontheight() +
+	tempy =  0;  // TFT_getfontheight() +
 	m_fg = TFT_CYAN;
-	TFT_print("SL", CENTER,  tempy); // (dispWin.y2-dispWin.y1)/2
+	TFT_print("JAKOBSBERG", CENTER,  tempy); // (dispWin.y2-dispWin.y1)/2
 	TFT_setFont(UBUNTU16_FONT, NULL);
 	m_fg = TFT_CYAN;
 	//TFT_print("TFT Demo", CENTER, LASTY+tempy);
@@ -91,20 +91,70 @@ void drawBusInfo(char *info,bool isTime) {
 
 }
 
+void train_parse(json_stream *json) {
+	bool is_train_to_sumpan=false;
+	  while ( json_peek(json) != JSON_ARRAY_END && !json_get_error(json)) {
+      enum json_type type = json_next(json);
+      switch (type) {
+		case JSON_STRING:
+		// JourneyDirection== 1
+			if (strcmp(json_get_string(json, NULL),"JourneyDirection")==0) {
+				type = json_next(json);
+				if (strcmp(json_get_string(json, NULL),"1")==0) {
+					is_train_to_sumpan=true;
+				}
+			    if (is_train_to_sumpan) {
+				   drawBusInfo("J",false);
+			    }
+			    printf("\"%s\"\t", json_get_string(json, NULL));
+			}
+			if (strcmp(json_get_string(json, NULL),"DisplayTime")==0) {
+			    type = json_next(json);
+			    if (is_train_to_sumpan) {
+				 drawBusInfo(json_get_string(json, NULL),true);
+				 is_train_to_sumpan=false;
+			} 	
+			
+			printf("\"%s\" \n", json_get_string(json, NULL));
+			}
+	    break;
+		default:
+		break;
+      }
+   }
+}
+
 void bus_parse(json_stream *json) {
    drawBusHeader();
+   bool is_bus_to_viksjo=false;
    while ( json_peek(json) != JSON_ARRAY_END && !json_get_error(json)) {
       enum json_type type = json_next(json);
       switch (type) {
         case JSON_STRING:
 			if (strcmp(json_get_string(json, NULL),"LineNumber")==0) {
-			type = json_next(json);
-			drawBusInfo(json_get_string(json, NULL),false);
-			printf("\"%s\"\t", json_get_string(json, NULL));
+				type = json_next(json);
+				if (strcmp(json_get_string(json, NULL),"553")==0) {
+					is_bus_to_viksjo=true;
+				}
+				if (strcmp(json_get_string(json, NULL),"551")==0) {
+					is_bus_to_viksjo=true;
+				}
+				if (strcmp(json_get_string(json, NULL),"552")==0) {
+					is_bus_to_viksjo=true;
+				}
+
+			    if (is_bus_to_viksjo) {
+				   drawBusInfo(json_get_string(json, NULL),false);
+			    }
+			    printf("\"%s\"\t", json_get_string(json, NULL));
 			}
 			if (strcmp(json_get_string(json, NULL),"DisplayTime")==0) {
-			type = json_next(json);
-			drawBusInfo(json_get_string(json, NULL),true);
+			    type = json_next(json);
+			    if (is_bus_to_viksjo) {
+				 drawBusInfo(json_get_string(json, NULL),true);
+				 is_bus_to_viksjo=false;
+			} 	
+			
 			printf("\"%s\" \n", json_get_string(json, NULL));
 			}
 	    break;
@@ -130,6 +180,11 @@ void test_parse(json_stream *json)
 					  bus_parse(json);
 					}
 					//printf("\"%s\"\n", json_get_string(json, NULL));
+				}
+				if (json_peek(json)==JSON_ARRAY) {
+					if (strcmp(json_get_string(json, NULL),"Trains")==0) {
+				       train_parse(json);
+					}
 				}
 			break;
 		default:
@@ -341,7 +396,7 @@ static void http_get_task(void *pvParameters)
 
         ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d\r\n", r, errno);
         close(s);
-        for(int countdown = 10; countdown >= 0; countdown--) {
+        for(int countdown = 20; countdown >= 0; countdown--) {
             ESP_LOGI(TAG, "%d... ", countdown);
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
