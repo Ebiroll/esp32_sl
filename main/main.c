@@ -44,12 +44,109 @@
 #include "lwip/dns.h"
 #include "json.h"
 
+color_t	m_fg = {  0, 255,   0};
+color_t m_bg = {  0,   0,   0};
+
+int tempy ;
+
+void resetPos() {
+
+}
+
+
+void drawBusHeader() {
+	_tft_setRotation(PORTRAIT);
+	TFT_pushColorRep(0, 0, _width-1, _height-1, (color_t){0,0,0}, (uint32_t)(_height*_width));
+
+	TFT_setFont(COMIC24_FONT, NULL);
+	tempy =  4;  // TFT_getfontheight() +
+	m_fg = TFT_CYAN;
+	TFT_print("SL", CENTER,  tempy); // (dispWin.y2-dispWin.y1)/2
+	TFT_setFont(UBUNTU16_FONT, NULL);
+	m_fg = TFT_CYAN;
+	//TFT_print("TFT Demo", CENTER, LASTY+tempy);
+	//tempy = TFT_getfontheight() + 4;
+	//TFT_setFont(DEFAULT_FONT, NULL);
+	//m_fg = TFT_GREEN;
+	//sprintf(tmp_buff, "Read speed: %5.2f MHz", (float)max_rdclock/1000000.0);
+	//TFT_print(tmp_buff, CENTER, LASTY+tempy);
+
+}
+
+
+void drawBusInfo(char *info,bool isTime) {
+	TFT_setFont(COMIC24_FONT, NULL);
+	tempy = TFT_getfontheight() + 4;
+	m_fg = TFT_CYAN;
+	if (!isTime) {
+  	   TFT_print(info, CENTER, LASTY+tempy);
+	} else {
+  	   TFT_print(info, RIGHT, LASTY);		
+	}
+	//tempy = TFT_getfontheight() + 4;
+	//TFT_setFont(DEFAULT_FONT, NULL);
+	//m_fg = TFT_GREEN;
+	//sprintf(tmp_buff, "Read speed: %5.2f MHz", (float)max_rdclock/1000000.0);
+	//TFT_print(tmp_buff, CENTER, LASTY+tempy);
+
+}
+
+void bus_parse(json_stream *json) {
+   drawBusHeader();
+   while ( json_peek(json) != JSON_ARRAY_END && !json_get_error(json)) {
+      enum json_type type = json_next(json);
+      switch (type) {
+        case JSON_STRING:
+			if (strcmp(json_get_string(json, NULL),"LineNumber")==0) {
+			type = json_next(json);
+			drawBusInfo(json_get_string(json, NULL),false);
+			printf("\"%s\"\t", json_get_string(json, NULL));
+			}
+			if (strcmp(json_get_string(json, NULL),"DisplayTime")==0) {
+			type = json_next(json);
+			drawBusInfo(json_get_string(json, NULL),true);
+			printf("\"%s\" \n", json_get_string(json, NULL));
+			}
+	    break;
+		default:
+		break;
+      }
+   }
+}
+
+
+
+
+void test_parse(json_stream *json)
+{
+  // ResponseData
+  // json_peek(json) != JSON_OBJECT_END
+   while ( json_peek(json) != JSON_DONE && !json_get_error(json)) {
+      enum json_type type = json_next(json);
+		switch (type) {
+			case JSON_STRING:
+				if (json_peek(json)==JSON_ARRAY) {
+					if (strcmp(json_get_string(json, NULL),"Buses")==0) {
+					  bus_parse(json);
+					}
+					//printf("\"%s\"\n", json_get_string(json, NULL));
+				}
+			break;
+		default:
+			break;
+		}
+    }
+}
+
+
+
 
 // ==========================================================
 // Define which spi bus to use TFT_VSPI_HOST or TFT_HSPI_HOST
 #define SPI_BUS TFT_HSPI_HOST
 // ==========================================================
 
+// http://api.sl.se/api2/realtimedeparturesV4.json?key=&siteid=9702&timewindow=60
 
 /* Constants that aren't configurable in menuconfig */
 #define WEB_SERVER "api.sl.se"
@@ -142,6 +239,9 @@ static void http_get_task(void *pvParameters)
     int s, r;
     char recv_buf[64];
 
+	char *reply=malloc(2*4096);
+	int num_received=0;
+
     while(1) {
         /* Wait for the callback to set the CONNECTED_BIT in the
            event group.
@@ -207,13 +307,37 @@ static void http_get_task(void *pvParameters)
         ESP_LOGI(TAG, "... set socket receiving timeout success");
 
         /* Read HTTP response */
+		bool started_json;
+		started_json=false;
+		num_received=0;
         do {
             bzero(recv_buf, sizeof(recv_buf));
             r = read(s, recv_buf, sizeof(recv_buf)-1);
+
+			//char *reply=malloc(4096);
+			//int num_received=0;
+
             for(int i = 0; i < r; i++) {
-                putchar(recv_buf[i]);
+
+				if (started_json==false) {
+					if (recv_buf[i]=='{') {
+						started_json=true;
+					}
+				}
+				if (started_json) {
+					reply[num_received]=recv_buf[i];
+					num_received++;
+				}
+                //putchar(recv_buf[i]);
             }
         } while(r > 0);
+		reply[num_received]=0;
+
+        json_stream json;
+        json_open_string(&json, reply);
+    	json_set_streaming(&json, false);
+    	test_parse(&json);
+
 
         ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d\r\n", r, errno);
         close(s);
@@ -1571,13 +1695,26 @@ void app_main()
     }
 	Wait(-2000);
 
+	TFT_resetclipwin();
+    uint8_t disp_rot = PORTRAIT;
+	_demo_pass = 0;
+	gray_scale = 0;
+	doprint = 1;
+
+	TFT_setRotation(disp_rot);
+	disp_header("ESP32 SL");
+
+
 
 	xTaskCreate(&http_get_task, "http_get_task", 2*4096, NULL, 5, NULL);
 
 	//=========
     // Run demo
 	//=========
-	tft_demo();
+	//tft_demo();
+	while(true) {
+		Wait(2000);
+	}
 }
 
 #endif
